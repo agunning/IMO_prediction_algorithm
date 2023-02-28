@@ -53,10 +53,22 @@ def toCsv(filename,newfilename=""):
     if (newfilename!=""):
       newDF.to_csv(newfilename, index=False)
     return newDF
-def scramble(oldfilename,newfilename="",Scteam=0,Scind=0):
-    data=pd.read_csv(oldfilename)
-    data.rename(columns = lambda x: index_q(x), inplace=True)
-    data[range(0,6)].astype("Int64", copy=False)
+def scramble(oldfilename,newfilename="",is_xml=True,Scteam=0,Scind=0):
+    #Function used for testing, creates a typical partial set of data available from a known complete IMO in the past
+    #SCteam: the number of (country, problem) pairs not yet marked
+    #SCInd: the number of (individual, problem) pairs not yet marked (in practice this number will be very small, for problematic scripts, and this probably does leak some information about what the values in question are)
+    #Additionally some scores are obscured despite their values being known to prevent people from doing precisely the thing I'm doing now.
+    
+    if is_xml:
+        rawdata=pd.read_xml(filename).sort_values('code').reset_index()
+        rawdata['Name']=rawdata.name+" "+rawdata.surname
+        rawdata['Country']=rawdata.code
+        data=np.array([rawdata['problem'+str(i)] for i in range(1,7)]).T
+
+    else:
+        rawdata=pd.read_csv(filename)
+        rawdata.rename(columns = lambda x: index_q(x), inplace=True)
+        data = rawdata[range(0,6)].astype("Int64", copy=False).T
     deletedRows=[0]*6
     for i in range(0,len(data)):
         if i==0 or data.Country[i]!=data.Country[i-1]: #That is, if the contestant is from a nation not previously seen
