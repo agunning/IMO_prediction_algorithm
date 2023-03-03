@@ -111,7 +111,7 @@ def predict(filename,
     '''
     tfilename: if this is a path to known complete data known this gives calibration data on predictions, if it is the empty string it does nothing
     interpret: gives summary statistics for a complete IM
-    is_xml: if
+    filetype: 'xml' or 'csv'
     candeval: takes complete data and gives individual contestant Elos; to keep things fair the contributions of countries are set to 0
 
     returns an IMOPredictionOutput object where you can run
