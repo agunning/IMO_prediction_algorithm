@@ -53,13 +53,16 @@ def toCsv(filename,newfilename=""):
     if (newfilename!=""):
       newDF.to_csv(newfilename, index=False)
     return newDF
-def scramble(oldfilename,newfilename="",is_xml=True,Scteam=0,Scind=0):
-    #Function used for testing, creates a typical partial set of data available from a known complete IMO in the past
-    #SCteam: the number of (country, problem) pairs not yet marked
-    #SCInd: the number of (individual, problem) pairs not yet marked (in practice this number will be very small, for problematic scripts, and this probably does leak some information about what the values in question are)
-    #Additionally some scores are obscured despite their values being known to prevent people from doing precisely the thing I'm doing now.
+def scramble(oldfilename,newfilename="",filetype='xml',Scteam=0,Scind=0):
+    '''
+    Function used for testing, creates a typical partial set of data available from a known complete IMO in the past
+    SCteam: the number of (country, problem) pairs not yet marked
+    SCInd: the number of (individual, problem) pairs not yet marked (in practice this number will be very small, for problematic scripts, and this probably does leak some information about what the values in question are)
+    Additionally some scores are obscured despite their values being known to prevent people from doing precisely the thing I'm doing now.
+    Any of the XMLs given should work here and give you a csv of what this should typically look like.
+    '''
     
-    if is_xml:
+    if filetype="xml":
         rawdata=pd.read_xml(filename).sort_values('code').reset_index()
         rawdata['Name']=rawdata.name+" "+rawdata.surname
         rawdata['Country']=rawdata.code
@@ -97,7 +100,7 @@ def predict(filename,
             interpret= False,
             tfilename="",
             candeval=False,
-            is_xml=False,
+            filetype="csv",
             countrydp=0,
             countryvar=0,
             problemdp=0,
@@ -105,20 +108,34 @@ def predict(filename,
             problemmu=0
     
 ):
+    '''
+    tfilename: if this is a path to known complete data known this gives calibration data on predictions, if it is the empty string it does nothing
+    interpret: gives summary statistics for a complete IM
+    is_xml: if
+    candeval: takes complete data and gives individual contestant Elos; to keep things fair the contributions of countries are set to 0
+
+    returns an IMOPredictionOutput object where you can run
+    printCuts(): explains medal cutoffs
+    printElos(): if candeval is set to true prints candidate elos
+    plotProblem(): takes a number from 1 to 6 and gives you a plot of how hard the problem is
+    plotContest(): the same but for the whole contest
+    printWinner(): explains a probability distribution over the likely winners
+    countryResult(): takes a 3 letter country code
+    The output of any of these functions is generally self-explanatory.
     
-            #usage: tfilename is used for calibration, if it exists.\
-            #verbosity = 0: medal cuts
-            #ver
-    if is_xml:
+    '''
+    if filetype=="xml":
         data=pd.read_xml(filename).sort_values('code').reset_index()
         data['Name']=data.name+" "+data.surname
         data['Country']=data.code
         Results=np.array([data['problem'+str(i)] for i in range(1,7)]).T
 
-    else:
+    elif filetype=="csv":
         data=pd.read_csv(filename)
         data.rename(columns = lambda x: index_q(x), inplace=True)
         Results = data[range(0,6)].astype("Int64", copy=False).T
+    else:
+        raise Exception("filetype must be csv or xml")
     if tfilename!="": 
         calibration=True
         tdata=pd.read_csv(tfilename)
@@ -453,6 +470,7 @@ class cutsStatistics:
                     print(str(i)+"  "+str(round(self.MaxScores[i]))+"%")                
 
 class IMOPredictionOutput:
+    
     def __init__(self):
         self.cuts=None
         self.countryRankings=None
@@ -471,7 +489,7 @@ class IMOPredictionOutput:
         elodata = self.contestantElo
         print( elodata.sort_values(by=["Elo"], ascending = False).to_string())
         return 0
-    def plotProblems(self,problem):
+    def plotProblem(self,problem):
         X=list(range(500,3500,50))
         problemdata=output["problemElos"]
         prob=np.array([[0.]*8]*len(X))
