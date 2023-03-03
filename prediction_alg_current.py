@@ -121,6 +121,8 @@ def predict(filename,
     plotContest(): the same but for the whole contest
     printWinner(): explains a probability distribution over the likely winners
     countryResult(): takes a 3 letter country code
+    plotCalibration() gives you a calibration plot of predictions this algorithm makes vs a known baseline,
+    The predictions in question are everything of the form "with probability P candidate X gets score Y on problem Z"
     The output of any of these functions is generally self-explanatory.
     
     '''
