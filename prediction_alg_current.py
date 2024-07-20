@@ -53,9 +53,9 @@ def toCsv(filename,newfilename=""):
     if (newfilename!=""):
       newDF.to_csv(newfilename, index=False)
     return newDF
-def scramble(filename,newfilename="",filetype='xml',Scteam=0,Scind=0):
+def scramble(filename,newfilename="",filetype='xml',Scteam=0,Scind=0,Trials=1000):
     '''
-    Function used for testing, creates a typical partial set of data available from a known complete IMO in the past
+e    Function used for testing, creates a typical partial set of data available from a known complete IMO in the past
     SCteam: the number of (country, problem) pairs not yet marked
     SCInd: the number of (individual, problem) pairs not yet marked (in practice this number will be very small, for problematic scripts, and this probably does leak some information about what the values in question are)
     Additionally some scores are obscured despite their values being known to prevent people from doing precisely the thing I'm doing now.
@@ -111,7 +111,8 @@ def predict(filename,
             countryvar=0,
             problemdp=0,
             problemvar=0,
-            problemmu=0
+            problemmu=0,
+            Trials=1000,
     
 ):
     '''
@@ -188,6 +189,7 @@ def predict(filename,
     EContestantEloSq=[0]*Contestants
     EPtElo=[0]*42
     EPtEloSq=[0]*42
+    contestantsGreaterThan=np.zeros((42,Contestants+1))
     if calibration == True :
         RealResults=[]
         PredictedResults=[]
@@ -205,9 +207,15 @@ def predict(filename,
         PerfectScores=[0]*100
     if candeval==False:
         Countries=pd.unique(data.Country)
+        countriesGreaterThan=np.zeros((252,len(Countries)+1))
+      
         CRankings={}
+        CExpScores={}
+        CExpScoresSq={}
         for Country in Countries:
             CRankings[Country]=[0]*len(Countries)
+            CExpScores[Country]=0
+            CExpScoresSq[Country]=0
 
             CMedals={}
         for Country in Countries:
@@ -230,7 +238,6 @@ def predict(filename,
         InfoParticipants.append(-1)
         InfoType.append(4)
     Infos=len(InfoType)
-    Trials=1000
     TrialLength=10000
     trialno=0
     print("Running trials:")
@@ -286,7 +293,7 @@ def predict(filename,
             ContestantNoise=ContestantInfo[Contestant]/Temperature
             ContestantElo[Contestant]+=random.gauss(0,math.sqrt(1/ContestantNoise))
         if k%10000==9999 and k<=1000000:
-            Temperature= .01#10000/(k+1)
+            Temperature= 10000/(k+1)
             #print(Temperature)
         elif k%TrialLength==TrialLength-1 and k>500000: #We generate a possible IM0
             
@@ -340,12 +347,16 @@ def predict(filename,
                 ScoreDistribution=[0]*43
                 for i in range(0,Contestants):
                     ScoreDistribution[ContestantScores[i]]+=1
+                a=Contestants-np.cumsum(ScoreDistribution)[:42]
+                for i in range(0,42):
+                    contestantsGreaterThan[i,a[i]]+=1
+                
                 i=0
                 culm=0
                 while(culm<Contestants/2):
                     culm+=ScoreDistribution[i]
                     i+=1
-                    JuryGenerosity=(random.random()+1)/2
+                    JuryGenerosity=random.random()
                 if culm-ScoreDistribution[i-1]*JuryGenerosity>Contestants/2:
                     Bronze=i-1
                     nomed=culm-ScoreDistribution[i-1]
@@ -355,7 +366,7 @@ def predict(filename,
                 while(culm-nomed<(Contestants-nomed)/2):
                     culm+=ScoreDistribution[i]
                     i+=1
-                    JuryGenerosity=(1+random.random())/3
+                    JuryGenerosity=random.random()
                 if culm-ScoreDistribution[i-1]*JuryGenerosity-nomed>1*(Contestants-nomed)/2:
                     Silver=i-1
                 else:
@@ -363,7 +374,7 @@ def predict(filename,
                 while(culm-nomed<5*(Contestants-nomed)/6):
                      culm+=ScoreDistribution[i]
                      i+=1
-                     JuryGenerosity=(1+random.random())/3
+                     JuryGenerosity=random.random()
                 if culm-ScoreDistribution[i-1]*JuryGenerosity-nomed>5*(Contestants-nomed)/6:
                     Gold=i-1
                 else:
@@ -389,6 +400,12 @@ def predict(filename,
                     for t in binary_partial_up(CTotalScore[Country]+1):
                         CRanking[Country]+=QuickScoreDist[t]
                     CRankings[Country][CRanking[Country]]+=100/Trials
+                    CExpScores[Country]+=CTotalScore[Country]/Trials
+                    CExpScoresSq[Country]+=CTotalScore[Country]**2/Trials
+                a=np.bincount(list(CTotalScore.values()),minlength=253)
+                b=len(Countries)-np.cumsum(a)[:252]
+                for i in range(252):
+                    countriesGreaterThan[i,b[i]]+=1
                 if True:
                     CMedalCount={}
                     for Country in Countries:
@@ -416,10 +433,14 @@ def predict(filename,
         output.cuts=cutsStatistics(GoldCuts,SilverCuts,BronzeCuts,MaxScores,PerfectScores)
         output.countryRankings=CRankings
         output.countryMedals=CMedals
+        output.countryExpScores=CExpScores
+        output.countryExpScoresSq=CExpScoresSq
     if calibration==True:
         output.predictions=PredictedResults
         output.results=RealResults
+        output.countriesGreaterThan=countriesGreaterThan/Trials
     if True:
+        output.contestantsGreaterThan=contestantsGreaterThan/Trials
         output.contestantEloDeltasq=ContestantEloDeltasq
         contestantdata = data[["Name", "Country"]].copy()
         contestantdata["Elo"]=np.array(EContestantElo)
