@@ -7,7 +7,7 @@ import time
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from tqdm import tqdm
-from countrycodes import countrycodes
+#from countrycodes import countrycodes
 #in which I write some code to predict IMO scores from partial data using something that's approximately MCMC and BayesElo
 headings = ["Name", "Country", "Q1","Q2","Q3","Q4","Q5","Q6","Total", "Rank", "Award"]
 def binary_partial_down(x):
@@ -53,7 +53,7 @@ def toCsv(filename,newfilename=""):
     if (newfilename!=""):
       newDF.to_csv(newfilename, index=False)
     return newDF
-def scramble(oldfilename,newfilename="",filetype='xml',Scteam=0,Scind=0):
+def scramble(filename,newfilename="",filetype='xml',Scteam=0,Scind=0):
     '''
     Function used for testing, creates a typical partial set of data available from a known complete IMO in the past
     SCteam: the number of (country, problem) pairs not yet marked
@@ -62,7 +62,7 @@ def scramble(oldfilename,newfilename="",filetype='xml',Scteam=0,Scind=0):
     Any of the XMLs given should work here and give you a csv of what this should typically look like.
     '''
     
-    if filetype="xml":
+    if filetype=="xml":
         rawdata=pd.read_xml(filename).sort_values('code').reset_index()
         rawdata['Name']=rawdata.name+" "+rawdata.surname
         rawdata['Country']=rawdata.code
@@ -74,7 +74,7 @@ def scramble(oldfilename,newfilename="",filetype='xml',Scteam=0,Scind=0):
         data = rawdata[range(0,6)].astype("Int64", copy=False).T
     deletedRows=[0]*6
     for i in range(0,len(data)):
-        if i==0 or data.Country[i]!=data.Country[i-1]: #That is, if the contestant is from a nation not previously seen
+        if i==0 or rawdata.Country[i]!=rawdata.Country[i-1]: #That is, if the contestant is from a nation not previously seen
             k=0
             omit=np.random.permutation(6) #Usually, the markers remove a different mark for each candidate
             for j in range(0,6):
@@ -82,17 +82,22 @@ def scramble(oldfilename,newfilename="",filetype='xml',Scteam=0,Scind=0):
                     deletedRows[j]=1
                 else:
                     deletedRows[j]=0
+        print(data.shape)
         for j in range(0,6):
             if deletedRows[j]==1:
-                data[j][i]=np.nan
+                data[i][j]=-1
             elif random.random()<Scind:
-                data[j][i]=np.nan
+                data[i][k]=-1
             elif omit[k]==j:
-                data[j][i]=np.nan
+                data[i][j]=-1
         k+=1
-    data.rename(columns = lambda x: name_q(x), inplace=True)
+    for i in range(0,6):
+    	rawdata[i]=data[:,i]
+    #data.rename(columns = lambda x: name_q(x), inplace=True)
+    
+    print(rawdata.columns)
     if newfilename!="":
-        data.drop(["Total","Rank","Award"],axis=1).to_csv(newfilename, index=False)
+        rawdata.drop(["Total","Rank","Award"],axis=1).to_csv(newfilename, index=False)
     return data
 
 
@@ -154,7 +159,7 @@ def predict(filename,
         for j in range(0,6):
             Result=Results[i][j]
             #print(Result.dtype)
-            if(not pd.isna(Result)):
+            if(not Result==-1):
                 ContestantInfo[i]=ContestantInfo[i]+min(7,Result+1)
                 for k in range(0, Result):
                     InfoParticipants.append([i,7*j+k])
@@ -307,7 +312,7 @@ def predict(filename,
                     Score=0
                     
                     for j in range(0,6):
-                        if not(pd.isna(Results[i][j])):
+                        if not(Results[i][j]==-1):
                             Score+=Results[i][j]
                             if (Results[i][j]==7):
                                 ContestantHM[i]=1
@@ -339,8 +344,8 @@ def predict(filename,
                 while(culm<Contestants/2):
                     culm+=ScoreDistribution[i]
                     i+=1
-                    JuryGenerosity=(random.random())/2
-                if culm-ScoreDistribution[i]*JuryGenerosity<Contestants/2:
+                    JuryGenerosity=(1+random.random())/3
+                if culm-ScoreDistribution[i]*JuryGenerosity>Contestants/2:
                     Bronze=i-1
                 else:
                     Bronze=i
@@ -348,7 +353,7 @@ def predict(filename,
                     culm+=ScoreDistribution[i]
                     i+=1
                     JuryGenerosity=(1+random.random())/3
-                if culm-ScoreDistribution[i]*JuryGenerosity<3*Contestants/4:
+                if culm-ScoreDistribution[i]*JuryGenerosity>3*Contestants/4:
                     Silver=i-1
                 else:
                     Silver=i
@@ -356,7 +361,7 @@ def predict(filename,
                      culm+=ScoreDistribution[i]
                      i+=1
                      JuryGenerosity=(1+random.random())/3
-                if culm-ScoreDistribution[i]*JuryGenerosity<11*Contestants/12:
+                if culm-ScoreDistribution[i]*JuryGenerosity>11*Contestants/12:
                     Gold=i-1
                 else:
                     Gold=i
@@ -543,8 +548,8 @@ class IMOPredictionOutput:
         plt.show()
         return df
     def CountryResult(self,country):
-        if country in countrycodes.keys():
-            country=countrycodes[country]
+        #if country in countrycodes.keys():
+        #    country=countrycodes[country]
         if country not in self.countryRankings.keys():
             print(country+" not in database for this IMO")
             return -1
