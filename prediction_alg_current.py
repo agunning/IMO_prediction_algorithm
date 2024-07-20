@@ -71,7 +71,7 @@ def scramble(filename,newfilename="",filetype='xml',Scteam=0,Scind=0):
     else:
         rawdata=pd.read_csv(filename)
         rawdata.rename(columns = lambda x: index_q(x), inplace=True)
-        data = rawdata[range(0,6)].astype("Int64", copy=False).T
+        data = rawdata[range(0,6)].astype("Int64", copy=False)
     deletedRows=[0]*6
     for i in range(0,len(data)):
         if i==0 or rawdata.Country[i]!=rawdata.Country[i-1]: #That is, if the contestant is from a nation not previously seen
@@ -82,22 +82,23 @@ def scramble(filename,newfilename="",filetype='xml',Scteam=0,Scind=0):
                     deletedRows[j]=1
                 else:
                     deletedRows[j]=0
-        print(data.shape)
         for j in range(0,6):
             if deletedRows[j]==1:
-                data[i][j]=-1
+                data[j][i]=-1
             elif random.random()<Scind:
-                data[i][k]=-1
+                data[j][i]=-1
             elif omit[k]==j:
-                data[i][j]=-1
+                data[j][i]=-1
         k+=1
-    for i in range(0,6):
-    	rawdata[i]=data[:,i]
-    #data.rename(columns = lambda x: name_q(x), inplace=True)
+    print(rawdata)
+    data.rename(columns = lambda x: name_q(x), inplace=True)
+    for i in range(6):
+        rawdata[name_q(i)]=data[name_q(i)]
     
     print(rawdata.columns)
     if newfilename!="":
-        rawdata.drop(["Total","Rank","Award"],axis=1).to_csv(newfilename, index=False)
+        #daa.to_csv(newfilename, index=False)
+         rawdata.drop(["Total","Rank","Award",0,1,2,3,4,5],axis=1).to_csv(newfilename, index=False)
     return data
 
 
@@ -255,7 +256,7 @@ def predict(filename,
             ContestantPriorPrecision=np.random.gamma((Contestants+1)/2,2/(((np.array(ContestantElo)-np.array(ContestantPrior))**2).sum()+1)+.01)
             QuestionMean=random.gauss((42*np.array(PtElo).mean()+problemdp*problemmu)/(42+problemdp),1/math.sqrt(QuestionPriorPrecision*(42+problemdp)))
             
-            if (candeval == False and k>500000):
+            if (candeval == False and k>1000000):
                 #print(CElo)
                 CPriorPrecision=np.random.gamma((len(Countries)+1+countrydp)/2,2/((np.array(CElo)**2).sum()+1+countryvar*countrydp)+.000001)
             #print( QuestionPriorPrecision,ContestantPriorPrecision,CPriorPrecision,QuestionMean)
@@ -287,7 +288,7 @@ def predict(filename,
         if k%10000==9999 and k<=1000000:
             Temperature= .01#10000/(k+1)
             #print(Temperature)
-        elif k%TrialLength==TrialLength-1 and k>1000000: #We generate a possible IM0
+        elif k%TrialLength==TrialLength-1 and k>500000: #We generate a possible IM0
             
             #print("hi")
             for i in range(0,Contestants):
@@ -344,24 +345,26 @@ def predict(filename,
                 while(culm<Contestants/2):
                     culm+=ScoreDistribution[i]
                     i+=1
-                    JuryGenerosity=(1+random.random())/3
-                if culm-ScoreDistribution[i]*JuryGenerosity>Contestants/2:
+                    JuryGenerosity=(random.random()+1)/2
+                if culm-ScoreDistribution[i-1]*JuryGenerosity>Contestants/2:
                     Bronze=i-1
+                    nomed=culm-ScoreDistribution[i-1]
                 else:
                     Bronze=i
-                while(culm<3*Contestants/4):
+                    nomed=culm
+                while(culm-nomed<(Contestants-nomed)/2):
                     culm+=ScoreDistribution[i]
                     i+=1
                     JuryGenerosity=(1+random.random())/3
-                if culm-ScoreDistribution[i]*JuryGenerosity>3*Contestants/4:
+                if culm-ScoreDistribution[i-1]*JuryGenerosity-nomed>1*(Contestants-nomed)/2:
                     Silver=i-1
                 else:
                     Silver=i
-                while(culm<11*Contestants/12):
+                while(culm-nomed<5*(Contestants-nomed)/6):
                      culm+=ScoreDistribution[i]
                      i+=1
                      JuryGenerosity=(1+random.random())/3
-                if culm-ScoreDistribution[i]*JuryGenerosity>11*Contestants/12:
+                if culm-ScoreDistribution[i-1]*JuryGenerosity-nomed>5*(Contestants-nomed)/6:
                     Gold=i-1
                 else:
                     Gold=i
