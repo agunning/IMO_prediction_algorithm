@@ -39,7 +39,16 @@ def name_q(x):
         return "Q"+str(x+1)
     else:
         return x
-    
+def ordinal(x):
+    if x%100 in range(10,20):
+        return str(x)+"th"
+    if x%10 == 1:
+        return str(x)+"st"
+    if x%10 == 2:
+        return str(x)+"nd"
+    if x%10 == 3:
+        return str(x)+"rd"
+    return str(x)+"th"
 def toCsv(filename,newfilename=""):
     file=open(filename,"r")
     output=[]
@@ -61,7 +70,9 @@ e    Function used for testing, creates a typical partial set of data available 
     Additionally some scores are obscured despite their values being known to prevent people from doing precisely the thing I'm doing now.
     Any of the XMLs given should work here and give you a csv of what this should typically look like.
     '''
-    
+    '''
+    TODO: fix for CSVs
+    '''
     if filetype=="xml":
         rawdata=pd.read_xml(filename).sort_values('code').reset_index()
         rawdata['Name']=rawdata.name+" "+rawdata.surname
@@ -132,6 +143,9 @@ def predict(filename,
     The predictions in question are everything of the form "with probability P candidate X gets score Y on problem Z"
     The output of any of these functions is generally self-explanatory.
     
+    '''
+    '''
+    1000 trials should suffice to get cutoffs, 10000 for results for individual countries
     '''
     if filetype=="xml":
         data=pd.read_xml(filename).sort_values('code').reset_index()
@@ -210,12 +224,10 @@ def predict(filename,
         countriesGreaterThan=np.zeros((252,len(Countries)+1))
       
         CRankings={}
-        CExpScores={}
-        CExpScoresSq={}
+        CScores={}
         for Country in Countries:
             CRankings[Country]=[0]*len(Countries)
-            CExpScores[Country]=0
-            CExpScoresSq[Country]=0
+            CScores[Country]=np.zeros(253)
 
             CMedals={}
         for Country in Countries:
@@ -344,69 +356,7 @@ def predict(filename,
             #print(NewResults)
             
             if(interpret==False):
-                ScoreDistribution=[0]*43
-                for i in range(0,Contestants):
-                    ScoreDistribution[ContestantScores[i]]+=1
-                a=Contestants-np.cumsum(ScoreDistribution)[:42]
-                for i in range(0,42):
-                    contestantsGreaterThan[i,a[i]]+=1
-                
-                i=0
-                culm=0
-                while(culm<Contestants/2):
-                    culm+=ScoreDistribution[i]
-                    i+=1
-                    JuryGenerosity=random.random()
-                if culm-ScoreDistribution[i-1]*JuryGenerosity>Contestants/2:
-                    Bronze=i-1
-                    nomed=culm-ScoreDistribution[i-1]
-                else:
-                    Bronze=i
-                    nomed=culm
-                while(culm-nomed<(Contestants-nomed)/2):
-                    culm+=ScoreDistribution[i]
-                    i+=1
-                    JuryGenerosity=random.random()
-                if culm-ScoreDistribution[i-1]*JuryGenerosity-nomed>1*(Contestants-nomed)/2:
-                    Silver=i-1
-                else:
-                    Silver=i
-                while(culm-nomed<5*(Contestants-nomed)/6):
-                     culm+=ScoreDistribution[i]
-                     i+=1
-                     JuryGenerosity=random.random()
-                if culm-ScoreDistribution[i-1]*JuryGenerosity-nomed>5*(Contestants-nomed)/6:
-                    Gold=i-1
-                else:
-                    Gold=i
-                GoldCuts[Gold]+=100/Trials
-                SilverCuts[Silver]+=100/Trials
-                BronzeCuts[Bronze]+=100/Trials
-                MaxScores[MaxScore]+=100/Trials
-                PerfectScores[PerfectScore]+=100/Trials
-                CTotalScore={}
-                for Country in Countries:
-                    CTotalScore[Country]=0
-                for i in range(0,Contestants):
-                    Country=data.Country[i]
-                    CTotalScore[Country]+=ContestantScores[i]
-                QuickScoreDist=[0]*256
-                CRanking={}
-                for Country in Countries:
-                    for t in binary_partial_down(CTotalScore[Country]):
-                        QuickScoreDist[t]+=1
-                    CRanking[Country]=0
-                for Country in Countries:
-                    for t in binary_partial_up(CTotalScore[Country]+1):
-                        CRanking[Country]+=QuickScoreDist[t]
-                    CRankings[Country][CRanking[Country]]+=100/Trials
-                    CExpScores[Country]+=CTotalScore[Country]/Trials
-                    CExpScoresSq[Country]+=CTotalScore[Country]**2/Trials
-                a=np.bincount(list(CTotalScore.values()),minlength=253)
-                b=len(Countries)-np.cumsum(a)[:252]
-                for i in range(252):
-                    countriesGreaterThan[i,b[i]]+=1
-                if True:
+                def update_country_medal_count(Bronze,Silver,Gold,p):
                     CMedalCount={}
                     for Country in Countries:
                         CMedalCount[Country]=[0]*4
@@ -425,21 +375,86 @@ def predict(filename,
                         Medals=CMedalCount[Country]
                         MedalCode = (8**3)*Medals[0]+(8**2)*Medals[1]+(8**1)*Medals[2]+Medals[3]
                         if MedalCode not in CMedals[Country].keys():
-                            CMedals[Country][MedalCode]=100/Trials
+                            CMedals[Country][MedalCode]=100*p/Trials
                         else:
-                            CMedals[Country][MedalCode]+=100/Trials
+                            CMedals[Country][MedalCode]+=100*p/Trials
+                    return 0
+                ScoreDistribution=[0]*43
+                for i in range(0,Contestants):
+                    ScoreDistribution[ContestantScores[i]]+=1
+                contestantsGT=Contestants-np.cumsum(ScoreDistribution)[:42]
+                for i in range(0,42):
+                    contestantsGreaterThan[i,contestantsGT[i]]+=1
+                bcu = np.searchsorted(-contestantsGT,-Contestants/2) #bcl=bcu-1
+                pub=(contestantsGT[bcu-1]-Contestants/2)/(contestantsGT[bcu-1]-contestantsGT[bcu])
+                BronzeCuts[bcu+1]+=pub*100/Trials
+                BronzeCuts[bcu]+=(1-pub)*100/Trials
+                #if upper bronze cuts
+                bc=bcu
+                pb=pub
+                scu = np.searchsorted(-contestantsGT,-contestantsGT[bc]/2) #bcl=bcu-1
+                pus=(contestantsGT[scu-1]-contestantsGT[bc]/2)/(contestantsGT[scu-1]-contestantsGT[scu])
+                SilverCuts[scu+1]+=pb*pus*100/Trials
+                SilverCuts[scu]+=pb*(1-pus)*100/Trials
+                gcu = np.searchsorted(-contestantsGT,-contestantsGT[bc]/6) #bcl=bcu-1
+                pug=(contestantsGT[gcu-1]-contestantsGT[bc]/6)/(contestantsGT[gcu-1]-contestantsGT[gcu])
+                GoldCuts[gcu+1]+=pb*pug*100/Trials
+                GoldCuts[gcu]+=pb*(1-pug)*100/Trials
+                update_country_medal_count(bc+1,scu+1,gcu+1,pb*pus*pug)
+                update_country_medal_count(bc+1,scu,gcu+1,pb*(1-pus)*pug)
+                update_country_medal_count(bc+1,scu+1,gcu,pb*pus*(1-pug))
+                update_country_medal_count(bc+1,scu,gcu,pb*(1-pus)*(1-pug))
+                #if lover bronze cuts
+                bc=bcu-1
+                pb=1-pub
+                scu = np.searchsorted(-contestantsGT,-contestantsGT[bc]/2) #bcl=bcu-1
+                pus=(contestantsGT[scu-1]-contestantsGT[bc]/2)/(contestantsGT[scu-1]-contestantsGT[scu])
+                SilverCuts[scu+1]+=pb*pus*100/Trials
+                SilverCuts[scu]+=pb*(1-pus)*100/Trials
+                gcu = np.searchsorted(-contestantsGT,-contestantsGT[bc]/6) #bcl=bcu-1
+                pug=(contestantsGT[gcu-1]-contestantsGT[bc]/6)/(contestantsGT[gcu-1]-contestantsGT[gcu])
+                GoldCuts[gcu+1]+=pb*pug*100/Trials
+                GoldCuts[gcu]+=pb*(1-pug)*100/Trials
+                update_country_medal_count(bc+1,scu+1,gcu+1,pb*pus*pug)
+                update_country_medal_count(bc+1,scu,gcu+1,pb*(1-pus)*pug)
+                update_country_medal_count(bc+1,scu+1,gcu,pb*pus*(1-pug))
+                update_country_medal_count(bc+1,scu,gcu,pb*(1-pus)*(1-pug))
+                MaxScores[MaxScore]+=100/Trials
+                PerfectScores[PerfectScore]+=100/Trials
+                CTotalScore={}
+                for Country in Countries:
+                    CTotalScore[Country]=0
+                for i in range(0,Contestants):
+                    Country=data.Country[i]
+                    CTotalScore[Country]+=ContestantScores[i]
+                QuickScoreDist=[0]*256
+                CRanking={}
+                for Country in Countries:
+                    for t in binary_partial_down(CTotalScore[Country]):
+                        QuickScoreDist[t]+=1
+                    CRanking[Country]=0
+                for Country in Countries:
+                    for t in binary_partial_up(CTotalScore[Country]+1):
+                        CRanking[Country]+=QuickScoreDist[t]
+                    CRankings[Country][CRanking[Country]]+=100/Trials
+                    CScores[Country][CTotalScore[Country]]+=100/Trials
+                a=np.bincount(list(CTotalScore.values()),minlength=253)
+                b=len(Countries)-np.cumsum(a)[:252]
+                for i in range(252):
+                    countriesGreaterThan[i,b[i]]+=1
+               
     output = IMOPredictionOutput()
     if interpret==False:
         output.cuts=cutsStatistics(GoldCuts,SilverCuts,BronzeCuts,MaxScores,PerfectScores)
-        output.countryRankings=CRankings
+        output.countryRankings=CRankings   
         output.countryMedals=CMedals
-        output.countryExpScores=CExpScores
-        output.countryExpScoresSq=CExpScoresSq
+        output.countryScores=CScores
+        output.countriesGreaterThan=countriesGreaterThan/Trials
     if calibration==True:
         output.predictions=PredictedResults
         output.results=RealResults
-        output.countriesGreaterThan=countriesGreaterThan/Trials
     if True:
+        output.numContestants=Contestants
         output.contestantsGreaterThan=contestantsGreaterThan/Trials
         output.contestantEloDeltasq=ContestantEloDeltasq
         contestantdata = data[["Name", "Country"]].copy()
@@ -579,40 +594,41 @@ class IMOPredictionOutput:
             return -1
         rankings=self.countryRankings[country]
         medals=self.countryMedals[country]
-        culm=0
-        for i in range(0, len(rankings)):
-            if culm == 0 and culm+rankings[i]>=0:
-                rmin=i+1
-            if culm<10 and culm+rankings[i]>=10:
-                uq=i+1
-            if culm<50 and culm+rankings[i]>=50:
-                median=i+1
-            if culm<90 and culm+rankings[i]>=90:
-                lq=i+1
-            if culm<99.9 and culm+rankings[i]>=99.9 :
-                rmax=i+1
+        culm=np.cumsum(rankings)
 
-            culm=culm+rankings[i]
-        def ordinal(x):
-            if x%100 in range(10,20):
-                return str(x)+"th"
-            if x%10 == 1:
-                return str(x)+"st"
-            if x%10 == 2:
-                return str(x)+"nd"
-            if x%10 == 3:
-                return str(x)+"rd"
-            return str(x)+"th"
-        print( "In 80% of simulations " + country+ "'s team came between "+ordinal(uq)+" and "+ordinal(lq)+".")
-        print( "The median performance was "+ordinal(median)+".")
-
+        print( "In 80% of simulations " + country+ "'s team came between "+ordinal(np.searchsorted(culm,10)+1)+" and "+ordinal(np.searchsorted(culm,90)+1)+".")
+        print( "The median performance was "+ordinal(np.searchsorted(culm,50)+1)+".")
+        rmin = np.searchsorted(culm,0.01)
+        rmax = np.searchsorted(culm,99.99)
         plt.close()
         plot = plt.bar(list(range(rmin,rmax+1)),rankings[rmin-1:rmax])
         plt.xlabel('Ranking')
         plt.ylabel("Percent Probability")
         plt.title("Distribution of " + country + "'s possible rankings")
         plt.show()
+
+
+        results = self.countryScores[country]
+        cresults = np.cumsum(results)
+        cmin = np.searchsorted(cresults,0.01)
+        cmax = np.searchsorted(cresults,99.99)
+        plt.close()
+        plot = plt.bar(list(range(cmin,cmax+1)),results[cmin-1:cmax])
+        plt.xlabel('Ranking')
+        plt.ylabel("Percent Probability")
+        plt.title("Distribution of " + country + "'s possible results")
+        plt.show()
+
+
+        
+        print( "The mean score is " + str(np.round(results @ np.arange(253)/100,2))+", the median is " + str(np.searchsorted(cresults, 50)) + '.')
+        print( "In 80% of outcomes Australia scored beteern "+str(np.searchsorted(cresults, 10))+ " and "+str(np.searchsorted(cresults, 90))+".")
+
+       
+
         print( "Here are the most likely medal outcomes for " + country + ":")
+ 
+        
         outcomes= []
         for result in medals.keys():
             outcomes.append([medals[result],result])
@@ -673,3 +689,14 @@ class IMOPredictionOutput:
                     plt.ylabel("Actual fraction of occurences")
                     plt.show()
         return plt
+    def queryContestantScore(self,score):
+        culm = np.cumsum(self.contestantsGreaterThan[score])
+        med = np.searchsorted(culm,.5)
+        print('An individual score of '+str(score)+' was in the median simulation good for a position of '+ordinal(med+1)+ ' (80% confidence interval '+ ordinal(np.searchsorted(culm,.1)+1)+'-'+ordinal(np.searchsorted(culm,.9)+1) +').')
+        print("That's as least as good as " + str(round(100-100*med/self.numContestants,1))+"% of contestants")
+    def queryCountryScore(self,score):
+        culm = np.cumsum(self.countriesGreaterThan[score])
+        print('An country score of '+str(score)+' was in the median simulation good for a position of '+ordinal(np.searchsorted(culm,.5)+1)+ ' (80% confidence interval '+ ordinal(np.searchsorted(culm,.1)+1)+'-'+ordinal(np.searchsorted(culm,.9)+1) +').')
+        
+    
+        
