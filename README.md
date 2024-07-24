@@ -7,7 +7,9 @@ usage: in a python shell
 
 import prediction_alg_current
 
-output=prediction_alg_current.predict(filename='IMO2024.csv',Trials=1000) #Works for any similary formatted file. 1000 trials should work for cutoffs, 10000 for country results.
+output=prediction_alg_current.predict(filename='IMO2024.csv',Trials=1000) 
+
+#Works for any similary formatted file. 1000 (~2 mins) trials should work for cutoffs, 10000 (~20 mins) for country results.
 
 output.printCuts()
 
